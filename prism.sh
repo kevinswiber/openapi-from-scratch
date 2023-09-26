@@ -1,1 +1,0 @@
-prism mock ./machines.yaml
