@@ -1,5 +1,11 @@
 {
   "yaml.schemas": {
-    "https://spec.openapis.org/oas/3.1/schema/2022-10-07": ["*.yaml"]
+    "https://spec.openapis.org/oas/3.1/schema/2022-10-07": [
+      "openapi.yaml",
+      "*.openapi.yaml"
+    ],
+    "https://gist.githubusercontent.com/kevinswiber/b517d16eef878503f14f1ae1a7e4ad4b/raw/bce928f9b396785a2dba8d94d4ba6af0c68a09c2/ruleset.schema.json": [
+      ".spectral.yaml"
+    ]
   }
 }
