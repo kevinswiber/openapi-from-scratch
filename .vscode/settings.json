@@ -1,7 +1,7 @@
 {
+  "yaml.validate": true,
   "yaml.completion": true,
   "yaml.hover": true,
-  "yaml.validate": true,
   "yaml.format.enable": true,
   "yaml.format.printWidth": 80,
   "yaml.format.bracketSpacing": true,
