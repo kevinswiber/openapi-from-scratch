@@ -1,6 +1,7 @@
 # OpenAPI from Scratch - Lesson 1
 
 [![OpenAPI from Scratch - Lesson 1](http://img.youtube.com/vi/EC7lPIvuQ3k/0.jpg)](https://youtu.be/EC7lPIvuQ3k "OpenAPI from Scratch - Lesson 1")
+
 [Watch on YouTube](https://youtu.be/EC7lPIvuQ3k)
 
 * [00:00](https://www.youtube.com/watch?v=EC7lPIvuQ3k&t=0s) - Welcome
