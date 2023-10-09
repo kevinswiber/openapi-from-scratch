@@ -2,13 +2,13 @@
 
 [![OpenAPI from Scratch - Lesson 1](http://img.youtube.com/vi/EC7lPIvuQ3k/0.jpg)](https://youtu.be/EC7lPIvuQ3k "OpenAPI from Scratch - Lesson 1")
 
-* 00:00 - Welcome
-* 00:22 - What is OpenAPI?
-* 01:58 - Setting up your environment
-* 04:35 - Starting a new OpenAPI Description
-* 08:32 - Defining response examples
-* 10:24 - Creating a local mock server
-* 13:30 - Wrap up
+* [00:00](https://www.youtube.com/watch?v=EC7lPIvuQ3k&t=0s) - Welcome
+* [00:22](https://www.youtube.com/watch?v=EC7lPIvuQ3k&t=22s) - What is OpenAPI?
+* [01:58](https://www.youtube.com/watch?v=EC7lPIvuQ3k&t=118s) - Setting up your environment
+* [04:35](https://www.youtube.com/watch?v=EC7lPIvuQ3k&t=275s) - Starting a new OpenAPI Description
+* [08:32](https://www.youtube.com/watch?v=EC7lPIvuQ3k&t=512s) - Defining response examples
+* [10:24](https://www.youtube.com/watch?v=EC7lPIvuQ3k&t=624s) - Creating a local mock server
+* [13:30](https://www.youtube.com/watch?v=EC7lPIvuQ3k&t=810s) - Wrap up
 
 ## Questions?
 
