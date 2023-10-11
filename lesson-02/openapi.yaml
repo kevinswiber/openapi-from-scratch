@@ -1,0 +1,31 @@
+---
+openapi: 3.1.0
+info:
+  title: Machines API
+  version: 0.1.0
+paths:
+  /machines:
+    get:
+      responses:
+        "200":
+          description: List of machines.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    region:
+                      type: string
+              examples:
+                success:
+                  value:
+                    - id: mercury
+                      region: us-east-1
+                    - id: venus
+                      region: us-west-1
+                    - id: mars
+                      region: us-west-2
