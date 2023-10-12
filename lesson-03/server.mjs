@@ -27,62 +27,58 @@ const router = {
         res.end(JSON.stringify(body));
       }
     }
-  },
-  fallback: {
-    handlers: {
-      "*": (_req, res) => {
-        res.setHeader("Content-Type", "text/plain");
-        res.statusCode = 404;
-        res.end("Not found.");
-      }
-    }
   }
 };
 
 const server = createServer((req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  const segments = url.pathname.split("/").filter(Boolean);
-
-  let subRouter = router;
-  let handlers = router.fallback?.handlers;
-  const allMatches = [];
-  for (const segment of segments) {
-    let foundMatch = false;
-    for (const routeKey of Object.keys(subRouter)) {
-      const re = new RegExp(`^${routeKey}$`);
-      const matches = re.exec(`/${segment}`);
-      if (matches) {
-        foundMatch = true;
-        allMatches.push(matches);
-        subRouter = subRouter[routeKey];
-        handlers = subRouter.handlers || handlers;
-        break;
-      }
-    }
-    if (!foundMatch) {
-      break;
-    }
-  }
-
-  const method = req.method.toLowerCase();
-  const handler = handlers[method] || handlers["*"];
-
-  if (!handler) {
-    if (!allMatches.length) {
-      res.statusCode = 404;
-      res.end("Not found.");
-      return;
-    }
-
-    res.statusCode = 406;
-    res.end("Method not allowed.");
-    return;
-  }
-
-  handler(req, res, allMatches);
+  const handler = route(req);
+  handler(req, res);
 });
 
 server.listen(port, () => {
   const { address, port } = server.address();
   console.log(`Server listening on http://${address}:${port}`);
 });
+
+function route(req) {
+  const state = {
+    router,
+    handlers: {},
+    matches: []
+  };
+
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const segments = url.pathname.split("/").filter(Boolean);
+  for (const segment of segments) {
+    for (const path of Object.keys(state.router)) {
+      const re = new RegExp(`^${path}$`);
+      const matches = re.exec(`/${segment}`);
+      if (matches) {
+        state.matches.push(matches);
+        state.router = state.router[path];
+        state.handlers = state.router.handlers || state.handlers;
+        break;
+      }
+    }
+    if (!state.matches.length) {
+      break;
+    }
+  }
+
+  const method = req.method.toLowerCase();
+  const inner = state.handlers[method] || state.handlers["*"] || fallback;
+  return function(req, res) {
+    return inner(req, res, state.matches);
+  };
+}
+
+function fallback(_req, res, matches) {
+  if (!matches.length) {
+    res.statusCode = 404;
+    res.end("Not found.");
+    return;
+  }
+
+  res.statusCode = 406;
+  res.end("Method not allowed.");
+};
