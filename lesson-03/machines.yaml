@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=./machines.schema.yaml
+
+- id: mercury
+  region: us-east-1
+- id: venus
+  region: us-west-1
+- id: mars
+  region: us-west-2
