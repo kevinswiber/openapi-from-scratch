@@ -4,6 +4,7 @@ import { isatty } from "node:tty";
 import { formatWithOptions } from "node:util";
 
 const kHandlers = Symbol.for("handlers");
+const kRouteOptions = Symbol.for("routeOptions");
 
 const port = env.PORT || 0;
 const isCompatibleTerminal = isatty(stdout.fd) && env.TERM
@@ -104,6 +105,7 @@ function createRouteTreeMap(routeMap) {
         routes.set(path, new Map());
       }
       let route = routes.get(path);
+      route.set(kRouteOptions, { matchToEnd: true });
       if (value instanceof Map) {
         for (const [k, v] of createRouteTreeMap(value).entries()) {
           route.set(k, v);
@@ -119,7 +121,7 @@ function createRouteTreeMap(routeMap) {
 
   const state = { routes };
   for (const [path, value] of stringPaths.entries()) {
-    const segments = path.split("/").map((s) => `/${s}`);
+    const segments = path.split(/(?<!\\)\//).map((s) => `/${s}`);
     segments.shift();
     for (const segment of segments) {
       try {
@@ -132,10 +134,12 @@ function createRouteTreeMap(routeMap) {
         continue;
       }
 
-      if (!state.routes.has(segment)) {
-        state.routes.set(segment, new Map());
+      const re = new RegExp(`^${segment}$`);
+      if (!state.routes.has(re)) {
+        state.routes.set(re, new Map());
       }
-      state.routes = state.routes.get(segment);
+      state.routes = state.routes.get(re);
+      state.routes.set(kRouteOptions, { matchToEnd: false });
     }
     if (value instanceof Map) {
       for (const [k, v] of createRouteTreeMap(value).entries()) {
@@ -178,28 +182,28 @@ function router(routes, { method, headers, url }) {
 
   let fullMatch = false;
   for (const [segmentIndex, segment] of segments.entries()) {
-    for (const path of state.routes.keys()) {
-      if (path === kHandlers) {
+    for (const [path, value] of state.routes.entries()) {
+      if (path === kHandlers || path === kRouteOptions) {
         continue;
       }
 
+      const options = value.get(kRouteOptions);
+
       let matchPath = segment;
-      if (path instanceof RegExp) {
-        // match to end
+      if (options.matchToEnd) {
         matchPath = segments.slice(segmentIndex).join("/");
       }
       matchPath = matchPath.startsWith("/") ? matchPath : `/${matchPath}`;
-      const re = path instanceof RegExp ? path : new RegExp(`^${path}$`);
-      const matches = re.exec(matchPath);
+      const matches = path.exec(matchPath);
 
 
       if (matches) {
-        if (path instanceof RegExp) {
+        if (options.matchToEnd) {
           fullMatch = true;
         }
         state.matches.push(matches);
-        state.routes = state.routes.get(path);
-        state.handlers = state.routes.get(kHandlers);
+        state.routes = value;
+        state.handlers = value.get(kHandlers);
         break;
       }
     }
