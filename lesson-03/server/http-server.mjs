@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { env, stderr, stdout } from "node:process";
+import { env, stdout } from "node:process";
 import { isatty } from "node:tty";
 import { formatWithOptions } from "node:util";
 
@@ -25,21 +25,22 @@ const formatter = logFormatters[logFormat];
 
 const log = {
   info(...args) {
+    this.write("info", ...args);
+  },
+  warn(...args) {
+    this.write("warn", ...args);
+  },
+  error(...args) {
+    this.write("error", ...args);
+  },
+  write(level, ...args) {
     const entry = {
-      level: "info",
+      level,
       date: new Date().toISOString(),
       message: formatWithOptions({ colors }, ...args),
     };
     stdout.write(`${formatter(entry)}\n`);
-  },
-  error(...args) {
-    const entry = {
-      level: "error",
-      date: new Date().toISOString(),
-      message: formatWithOptions({ colors }, ...args),
-    };
-    stderr.write(`${formatter(entry)}\n`);
-  },
+  }
 };
 
 function maybeColorizeLevel(level) {
@@ -50,6 +51,8 @@ function maybeColorizeLevel(level) {
   switch (level) {
     case "info":
       return `\x1b[32m${level}\x1b[39m`;
+    case "warn":
+      return `\x1b[33m${level}\x1b[39m`;
     case "error":
       return `\x1b[31m${level}\x1b[39m`;
     default:
@@ -93,24 +96,29 @@ function serve(routeMap) {
 
 function createRouteTreeMap(routeMap) {
   const routes = new Map();
+  const stringPaths = new Map();
 
-  const state = { routes };
   for (const [path, value] of routeMap.entries()) {
     if (path instanceof RegExp) {
-      if (!state.routes.has(path)) {
-        state.routes.set(path, new Map());
+      if (!routes.has(path)) {
+        routes.set(path, new Map());
       }
-      state.routes = state.routes.get(path);
+      let route = routes.get(path);
       if (value instanceof Map) {
         for (const [k, v] of createRouteTreeMap(value).entries()) {
-          state.routes.set(k, v);
+          route.set(k, v);
         }
       } else {
-        state.routes.set(kHandlers, value);
+        route.set(kHandlers, value);
       }
-      state.routes = routes;
       continue;
     }
+
+    stringPaths.set(path, value);
+  }
+
+  const state = { routes };
+  for (const [path, value] of stringPaths.entries()) {
     const segments = path.split("/").map((s) => `/${s}`);
     segments.shift();
     for (const segment of segments) {
@@ -118,10 +126,10 @@ function createRouteTreeMap(routeMap) {
         new RegExp(`^${segment}$`);
       } catch (err) {
         if (err instanceof SyntaxError) {
-          log.error("Invalid path syntax: `%s`. Is there an extra `/` "
-            + "character in a regular expression?", path);
+          log.warn("Invalid path syntax: `%s`. Is there an extra `/` "
+            + "character in a regular expression? %O", path, err);
         }
-        throw err;
+        continue;
       }
 
       if (!state.routes.has(segment)) {
@@ -138,7 +146,6 @@ function createRouteTreeMap(routeMap) {
     }
     state.routes = routes;
   }
-
 
   return routes;
 };
@@ -169,18 +176,27 @@ function router(routes, { method, headers, url }) {
   });
   segments.shift();
 
+  let fullMatch = false;
   for (const [segmentIndex, segment] of segments.entries()) {
     for (const path of state.routes.keys()) {
       if (path === kHandlers) {
         continue;
       }
 
-      const re = new RegExp(`^${path}$`);
-      const matches = segment?.startsWith("/") ?
-        re.exec(segment) :
-        re.exec(`/${segment}`);
+      let matchPath = segment;
+      if (path instanceof RegExp) {
+        // match to end
+        matchPath = segments.slice(segmentIndex).join("/");
+      }
+      matchPath = matchPath.startsWith("/") ? matchPath : `/${matchPath}`;
+      const re = path instanceof RegExp ? path : new RegExp(`^${path}$`);
+      const matches = re.exec(matchPath);
+
 
       if (matches) {
+        if (path instanceof RegExp) {
+          fullMatch = true;
+        }
         state.matches.push(matches);
         state.routes = state.routes.get(path);
         state.handlers = state.routes.get(kHandlers);
@@ -188,7 +204,7 @@ function router(routes, { method, headers, url }) {
       }
     }
 
-    if (state.matches.length < segmentIndex + 1) {
+    if (!fullMatch && state.matches.length < segmentIndex + 1) {
       state.matches = [];
       state.routes = routes;
       state.handlers = null;
