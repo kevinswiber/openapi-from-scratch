@@ -101,6 +101,10 @@ function createRouteTreeMap(routeMap) {
 
   for (const [path, value] of routeMap.entries()) {
     if (path instanceof RegExp) {
+      if (path.test("")) {
+        routes.set(kHandlers, value);
+        continue;
+      }
       if (!routes.has(path)) {
         routes.set(path, new Map());
       }
