@@ -95,8 +95,22 @@ function createRouteTreeMap(routeMap) {
   const routes = new Map();
 
   const state = { routes };
-  const keys = routeMap.keys();
-  for (const path of keys) {
+  for (const [path, value] of routeMap.entries()) {
+    if (path instanceof RegExp) {
+      if (!state.routes.has(path)) {
+        state.routes.set(path, new Map());
+      }
+      state.routes = state.routes.get(path);
+      if (value instanceof Map) {
+        for (const [k, v] of createRouteTreeMap(value).entries()) {
+          state.routes.set(k, v);
+        }
+      } else {
+        state.routes.set(kHandlers, value);
+      }
+      state.routes = routes;
+      continue;
+    }
     const segments = path.split("/").map((s) => `/${s}`);
     segments.shift();
     for (const segment of segments) {
@@ -115,15 +129,22 @@ function createRouteTreeMap(routeMap) {
       }
       state.routes = state.routes.get(segment);
     }
-    state.routes.set(kHandlers, routeMap.get(path));
+    if (value instanceof Map) {
+      for (const [k, v] of createRouteTreeMap(value).entries()) {
+        state.routes.set(k, v);
+      }
+    } else {
+      state.routes.set(kHandlers, value);
+    }
     state.routes = routes;
   }
+
 
   return routes;
 };
 
 server.on("error", function onError(err) {
-  console.log(err);
+  console.error(err);
 });
 
 server.listen(port, function onListen() {
@@ -135,7 +156,7 @@ server.listen(port, function onListen() {
 function router(routes, { method, headers, url }) {
   const state = {
     routes,
-    handlers: {},
+    handlers: null,
     matches: []
   };
 
@@ -170,28 +191,30 @@ function router(routes, { method, headers, url }) {
     if (state.matches.length < segmentIndex + 1) {
       state.matches = [];
       state.routes = routes;
-      state.handlers = {};
+      state.handlers = null;
       break;
     }
   }
 
-  const inner = state.handlers[method.toLowerCase()] ||
-    state.handlers["*"] || fallback;
+  const inner = state.handlers?.[method.toLowerCase()] ||
+    state.handlers?.["*"] || fallback(state.handlers);
 
   return function handlerWrap(request, response) {
     return inner({ request, response, matches: state.matches, log });
   };
 }
 
-function fallback({ response, matches }) {
-  if (!matches.length) {
-    response.statusCode = 404;
-    response.end("Not found.");
-    return;
-  }
+function fallback(handlers) {
+  return function({ response }) {
+    if (!handlers) {
+      response.statusCode = 404;
+      response.end("Not found.");
+      return;
+    }
 
-  response.statusCode = 406;
-  response.end("Method not allowed.");
-};
+    response.statusCode = 406;
+    response.end("Method not allowed.");
+  };
+}
 
 export { serve, log };
