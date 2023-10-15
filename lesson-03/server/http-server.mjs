@@ -34,6 +34,9 @@ const log = {
   error(...args) {
     this.write("error", ...args);
   },
+  fatal(...args) {
+    this.write("fatal", ...args);
+  },
   write(level, ...args) {
     const entry = {
       level,
@@ -55,6 +58,7 @@ function maybeColorizeLevel(level) {
     case "warn":
       return `\x1b[33m${level}\x1b[39m`;
     case "error":
+    case "fatal":
       return `\x1b[31m${level}\x1b[39m`;
     default:
       return level;
@@ -71,13 +75,17 @@ function maybeColorizeDate(date) {
 
 const server = createServer();
 
+function attemptGracefulShutdown(exitCode = 1) {
+  log.info("Attempting graceful shutdown...");
+  server.close(function onClose() {
+    log.info("Graceful shutdown complete.");
+    process.exit(exitCode);
+  });
+}
+
 ["SIGINT", "SIGTERM"].forEach((signal) => {
   process.on(signal, function onSignal() {
-    log.info("Attempting graceful shutdown...");
-    server.close(function onClose() {
-      log.info("Graceful shutdown complete.");
-      process.exit(0);
-    });
+    attemptGracefulShutdown(0);
   });
 });
 
@@ -159,7 +167,8 @@ function createRouteTreeMap(routeMap) {
 };
 
 server.on("error", function onError(err) {
-  console.error(err);
+  log.fatal(err);
+  attemptGracefulShutdown(1);
 });
 
 server.listen(port, function onListen() {
