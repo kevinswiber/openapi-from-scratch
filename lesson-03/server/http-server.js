@@ -163,7 +163,7 @@ function serve(routeMap) {
   });
 }
 
-function createRouteTreeMap(routeMap, isRoot = true) {
+function createRouteTreeMap(routeMap) {
   const routes = new Map();
   const stringPaths = new Map();
 
