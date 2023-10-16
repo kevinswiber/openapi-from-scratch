@@ -154,9 +154,11 @@ function serve(routeMap) {
         event: "http-routing-error",
         message: err
       });
-      response.statusCode = 500;
-      response.setHeader("Content-Type", "text/plain");
-      response.end("Internal server error.");
+      if (!response.headersSent) {
+        response.statusCode = 500;
+        response.setHeader("Content-Type", "text/plain");
+        response.end("Internal server error.");
+      }
     }
   });
 }
