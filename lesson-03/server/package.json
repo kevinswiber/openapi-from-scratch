@@ -1,0 +1,9 @@
+{
+  "name": "openapi-from-scratch-server",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "main.js",
+  "author": "Kevin Swiber <kswiber@gmail.com>",
+  "license": "MIT"
+}

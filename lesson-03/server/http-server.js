@@ -6,6 +6,17 @@ import { formatWithOptions } from "node:util";
 const kHandlers = Symbol.for("handlers");
 const kRouteOptions = Symbol.for("routeOptions");
 
+const logLevels = {
+  trace: 10,
+  debug: 20,
+  info: 30,
+  warn: 40,
+  error: 50,
+  fatal: 60,
+};
+
+const logLevel = env.LOG_LEVEL || "info";
+
 const port = env.PORT || 0;
 const isCompatibleTerminal = isatty(stdout.fd) && env.TERM
   && (env.TERM !== "dumb");
@@ -25,23 +36,8 @@ const logFormatters = {
 const formatter = logFormatters[logFormat];
 
 const log = {
-  info(...args) {
-    this.write("info", ...args);
-  },
-  warn(...args) {
-    this.write("warn", ...args);
-  },
-  error(...args) {
-    this.write("error", ...args);
-  },
-  debug(...args) {
-    this.write("debug", ...args);
-  },
-  trace(...args) {
-    this.write("trace", ...args);
-  },
-  fatal(...args) {
-    this.write("fatal", ...args);
+  supports(level) {
+    return logLevels[logLevel] <= logLevels[level]
   },
   write(level, ...args) {
     const entry = {
@@ -50,8 +46,33 @@ const log = {
       message: formatWithOptions({ colors }, ...args),
     };
     stdout.write(`${formatter(entry)}\n`);
+  },
+  writeObject(level, obj) {
+    const entry = {
+      level,
+      date: new Date().toISOString(),
+    };
+    stdout.write(`${formatter(Object.assign(entry, obj))}\n`);
   }
 };
+
+log.object = { logger: log };
+for (const level of Object.keys(logLevels)) {
+  Object.defineProperty(log, level, {
+    value: function(...args) {
+      if (this.supports(level)) {
+        this.write(level, ...args);
+      }
+    }
+  });
+  Object.defineProperty(log.object, level, {
+    value: function(obj) {
+      if (this.logger.supports(level)) {
+        this.logger.writeObject(level, obj);
+      }
+    }
+  });
+}
 
 function maybeColorizeLevel(level) {
   if (!colors) {
@@ -81,6 +102,20 @@ function maybeColorizeDate(date) {
   }
 
   return `\x1b[90m${date}\x1b[39m`;
+}
+
+function maybeColorizeStatusCode(statusCode) {
+  if (!colors) {
+    return statusCode;
+  }
+
+  if (statusCode >= 500) {
+    return `\x1b[31m${statusCode}\x1b[39m`;
+  } else if (statusCode >= 400) {
+    return `\x1b[33m${statusCode}\x1b[39m`;
+  } else {
+    return `\x1b[32m${statusCode}\x1b[39m`;
+  }
 }
 
 const server = createServer();
@@ -300,6 +335,33 @@ function router(routes, { method, headers, url }) {
     state.handlers?.["*"] || fallback(state.handlers);
 
   return function handlerWrap(request, response) {
+    request.on("error", (err) => {
+      log.error(err);
+    });
+    response.on("error", (err) => {
+      log.error(err);
+    });
+
+    if (log.supports("debug")) {
+      response.on("finish", () => {
+        const { statusCode } = response;
+        const { remoteAddress, remotePort } = request.socket;
+        const { method, url } = request;
+        const loggableURL = `${method} ${url}`;
+        const loggableStatusCode = maybeColorizeStatusCode(statusCode);
+        //log.debug("%s %s %s %s", remoteAddress, remotePort, loggableURL, loggableStatusCode);
+        const entry = {
+          statusCode,
+          remoteAddress,
+          method,
+          url,
+          message:
+            `${remoteAddress} ${remotePort} ${loggableURL} ${loggableStatusCode}`
+        }
+
+        log.object.debug(entry);
+      });
+    }
     return inner({ request, response, url: parsedURL, matches: state.matches, log });
   };
 }
