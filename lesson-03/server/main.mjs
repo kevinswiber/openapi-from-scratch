@@ -24,7 +24,12 @@ routes.set("/machines", {
   }
 });
 
-routes.set(/\/machines\/(?<id>.+)/, {
+routes.set("/", {
+  "*": ({ response }) => {
+    response.end("root");
+  }
+});
+routes.set("/machines/{(?<id>.+)}", {
   "*": ({ response, matches }) => {
     const { id } = matches.pop().groups;
     response.end(id);
@@ -33,8 +38,15 @@ routes.set(/\/machines\/(?<id>.+)/, {
 
 const widgets = new Map();
 
-widgets.set("/sub/[^\\/]+", { "*": ({ response }) => response.end("widget sub root") });
-widgets.set("/(?<widgetId>.+)", { "*": ({ response }) => response.end('widget item') });
+widgets.set("", { get: ({ response }) => response.end('got em') });
+widgets.set("/sub/{(?<path>.+)}", {
+  "*": ({ response, matches, log }) => {
+    log.debug(matches.pop().groups.path);
+    response.end("widget sub root");
+  }
+});
+widgets.set("/", { "*": ({ response }) => response.end("widget slash root") });
+widgets.set("/{(?<widgetId>.+)}", { "*": ({ response }) => response.end('widget item') });
 routes.set("/widgets", widgets);
 //routes.set(/\/widgets\/(?<widgetId2>.+)/, { "*": ({ response }) => response.end('from root widget item') });
 

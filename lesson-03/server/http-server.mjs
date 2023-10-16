@@ -34,6 +34,12 @@ const log = {
   error(...args) {
     this.write("error", ...args);
   },
+  debug(...args) {
+    this.write("debug", ...args);
+  },
+  trace(...args) {
+    this.write("trace", ...args);
+  },
   fatal(...args) {
     this.write("fatal", ...args);
   },
@@ -57,6 +63,10 @@ function maybeColorizeLevel(level) {
       return `\x1b[32m${level}\x1b[39m`;
     case "warn":
       return `\x1b[33m${level}\x1b[39m`;
+    case "debug":
+      return `\x1b[34m${level}\x1b[39m`;
+    case "trace":
+      return `\x1b[90m${level}\x1b[39m`;
     case "error":
     case "fatal":
       return `\x1b[31m${level}\x1b[39m`;
@@ -103,7 +113,7 @@ function serve(routeMap) {
   });
 }
 
-function createRouteTreeMap(routeMap) {
+function createRouteTreeMap(routeMap, isRoot = true) {
   const routes = new Map();
   const stringPaths = new Map();
 
@@ -117,9 +127,9 @@ function createRouteTreeMap(routeMap) {
         routes.set(path, new Map());
       }
       let route = routes.get(path);
-      route.set(kRouteOptions, { matchToEnd: true });
+      route.set(kRouteOptions, { matchToEnd: true, matchString: false });
       if (value instanceof Map) {
-        for (const [k, v] of createRouteTreeMap(value).entries()) {
+        for (const [k, v] of createRouteTreeMap(value, false).entries()) {
           route.set(k, v);
         }
       } else {
@@ -133,25 +143,51 @@ function createRouteTreeMap(routeMap) {
 
   const state = { routes };
   for (const [path, value] of stringPaths.entries()) {
-    const segments = path.split(/(?<!\\)\//).map((s) => `/${s}`);
-    segments.shift();
-    for (const segment of segments) {
-      try {
-        new RegExp(`^${segment}$`);
-      } catch (err) {
-        if (err instanceof SyntaxError) {
-          log.warn("Invalid path syntax: `%s`. Is there an extra `/` "
-            + "character in a regular expression? %O", path, err);
-        }
-        continue;
-      }
+    if (path === "") {
+      state.routes = routes;
+    }
 
-      const re = new RegExp(`^${segment}$`);
-      if (!state.routes.has(re)) {
-        state.routes.set(re, new Map());
+    const segments = Array.from(path).reduce((acc, char) => {
+      if (char === "/") {
+        acc.push("/");
+      } else {
+        const last = acc[acc.length - 1];
+        if (last === "/") {
+          acc.push(char);
+        } else {
+          acc[acc.length - 1] += char;
+        }
       }
-      state.routes = state.routes.get(re);
-      state.routes.set(kRouteOptions, { matchToEnd: false });
+      return acc;
+    }, []);
+
+    for (const segment of segments) {
+      if (segment.startsWith("{") && segment.endsWith("}")) {
+        const adjustedSegment = segment.substr(1, segment.length - 2);
+        try {
+          new RegExp(`^${adjustedSegment}$`);
+        } catch (err) {
+          if (err instanceof SyntaxError) {
+            log.warn("Invalid path syntax: `%s`. Is there an extra `/` "
+              + "character in a regular expression? %O", path, err);
+          }
+          continue;
+        }
+
+        const re = new RegExp(`^${adjustedSegment}$`);
+        if (!state.routes.has(re)) {
+          state.routes.set(re, new Map());
+        }
+        state.routes = state.routes.get(re);
+        state.routes.set(kRouteOptions, { matchToEnd: false, matchString: false });
+      } else {
+        if (!state.routes.has(segment)) {
+          state.routes.set(segment, new Map());
+        }
+
+        state.routes = state.routes.get(segment);
+        state.routes.set(kRouteOptions, { matchToEnd: false, matchString: true });
+      }
     }
     if (value instanceof Map) {
       for (const [k, v] of createRouteTreeMap(value).entries()) {
@@ -177,23 +213,35 @@ server.listen(port, function onListen() {
   log.info(`Server listening on http://${host}:${port}`);
 });
 
+function ensureLeadingSlash(segment) {
+  return segment.startsWith("/") ? segment : `/${segment}`;
+}
+
 function router(routes, { method, headers, url }) {
   const state = {
     routes,
     handlers: null,
-    matches: []
+    matches: [],
+    fullMatch: false,
   };
 
-  const { pathname } = new URL(url, `http://${headers.host}`);
-  const segments = pathname.split("/").map((segment) => {
-    if (segment === "") {
-      return "/";
-    }
-    return segment;
-  });
-  segments.shift();
+  const parsedURL = new URL(url, `http://${headers.host}`);
+  const { pathname } = parsedURL;
 
-  let fullMatch = false;
+  const segments = Array.from(pathname).reduce((acc, char) => {
+    if (char === "/") {
+      acc.push("/");
+    } else {
+      const last = acc[acc.length - 1];
+      if (last === "/") {
+        acc.push(char);
+      } else {
+        acc[acc.length - 1] += char;
+      }
+    }
+    return acc;
+  }, []);
+
   for (const [segmentIndex, segment] of segments.entries()) {
     for (const [path, value] of state.routes.entries()) {
       if (path === kHandlers || path === kRouteOptions) {
@@ -202,26 +250,41 @@ function router(routes, { method, headers, url }) {
 
       const options = value.get(kRouteOptions);
 
-      let matchPath = segment;
-      if (options.matchToEnd) {
-        matchPath = segments.slice(segmentIndex).join("/");
-      }
-      matchPath = matchPath.startsWith("/") ? matchPath : `/${matchPath}`;
-      const matches = path.exec(matchPath);
+      const matchPath = options.matchToEnd ?
+        segments.slice(segmentIndex).join("") :
+        segment;
 
+      if (options.matchString) {
+        if (matchPath === path) {
+          const matches = [path];
+          matches.index = 0;
+          matches.input = matchPath;
+          matches.groups = undefined;
 
-      if (matches) {
-        if (options.matchToEnd) {
-          fullMatch = true;
+          if (options.matchToEnd) {
+            state.fullMatch = true;
+          }
+
+          state.matches.push(matches);
+          state.routes = value;
+          state.handlers = value.get(kHandlers);
+          break;
         }
-        state.matches.push(matches);
-        state.routes = value;
-        state.handlers = value.get(kHandlers);
-        break;
+      } else {
+        const matches = path.exec(matchPath);
+        if (matches) {
+          if (options.matchToEnd) {
+            state.fullMatch = true;
+          }
+          state.matches.push(matches);
+          state.routes = value;
+          state.handlers = value.get(kHandlers);
+          break;
+        }
       }
     }
 
-    if (!fullMatch && state.matches.length < segmentIndex + 1) {
+    if (!state.fullMatch && state.matches.length < segmentIndex + 1) {
       state.matches = [];
       state.routes = routes;
       state.handlers = null;
@@ -233,7 +296,7 @@ function router(routes, { method, headers, url }) {
     state.handlers?.["*"] || fallback(state.handlers);
 
   return function handlerWrap(request, response) {
-    return inner({ request, response, matches: state.matches, log });
+    return inner({ request, response, url: parsedURL, matches: state.matches, log });
   };
 }
 
