@@ -148,10 +148,11 @@ function createRouteTreeMap(routeMap, isRoot = true) {
     }
 
     const segments = Array.from(path).reduce((acc, char) => {
-      if (char === "/") {
+      const last = acc[acc.length - 1];
+      const isEscaped = last?.endsWith("\\");
+      if (char === "/" && !isEscaped) {
         acc.push("/");
       } else {
-        const last = acc[acc.length - 1];
         if (last === "/") {
           acc.push(char);
         } else {
@@ -164,22 +165,25 @@ function createRouteTreeMap(routeMap, isRoot = true) {
     for (const segment of segments) {
       if (segment.startsWith("{") && segment.endsWith("}")) {
         const adjustedSegment = segment.substr(1, segment.length - 2);
+        const splitSegment = adjustedSegment.split(":", 2);
+        const hasSplat = splitSegment[0]?.endsWith("*");
+        const variableName = splitSegment[0]?.replace("*", "") || "segment";
+        const variableExpression = `(?<${variableName}>${splitSegment[1] || ".+"})`;
         try {
-          new RegExp(`^${adjustedSegment}$`);
+          new RegExp(`^${variableExpression}$`);
         } catch (err) {
           if (err instanceof SyntaxError) {
-            log.warn("Invalid path syntax: `%s`. Is there an extra `/` "
-              + "character in a regular expression? %O", path, err);
+            log.warn("Invalid path syntax: `%s`. %O", path, err);
           }
           continue;
         }
 
-        const re = new RegExp(`^${adjustedSegment}$`);
+        const re = new RegExp(`^${variableExpression}$`);
         if (!state.routes.has(re)) {
           state.routes.set(re, new Map());
         }
         state.routes = state.routes.get(re);
-        state.routes.set(kRouteOptions, { matchToEnd: false, matchString: false });
+        state.routes.set(kRouteOptions, { matchToEnd: !!hasSplat, matchString: false });
       } else {
         if (!state.routes.has(segment)) {
           state.routes.set(segment, new Map());
