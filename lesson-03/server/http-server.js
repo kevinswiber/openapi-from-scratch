@@ -28,8 +28,9 @@ const colors = (logFormat === "pretty") && !env.NO_COLOR
 const logFormatters = {
   json: (entry) => JSON.stringify(entry),
   pretty: (entry) => {
-    return formatWithOptions({ colors }, "[%s] %s: %s",
+    return formatWithOptions({ colors }, "[%s] %s%s: %s",
       maybeColorizeDate(entry.date), maybeColorizeLevel(entry.level),
+      entry.event ? ` (${entry.event})` : "",
       entry.message);
   }
 };
@@ -52,6 +53,9 @@ const log = {
       level,
       date: new Date().toISOString(),
     };
+    if (obj.message) {
+      obj.message = formatWithOptions({ colors }, obj.message);
+    }
     stdout.write(`${formatter(Object.assign(entry, obj))}\n`);
   }
 };
@@ -121,9 +125,15 @@ function maybeColorizeStatusCode(statusCode) {
 const server = createServer();
 
 function attemptGracefulShutdown(exitCode = 1) {
-  log.info("Attempting graceful shutdown...");
+  log.object.info({
+    event: "http-close",
+    message: "Attempting graceful shutdown..."
+  });
   server.close(function onClose() {
-    log.info("Graceful shutdown complete.");
+    log.object.info({
+      event: "http-graceful-shutdown",
+      message: "Graceful shutdown complete."
+    });
     process.exit(exitCode);
   });
 }
@@ -140,7 +150,10 @@ function serve(routeMap) {
     try {
       router(routes, request)?.(request, response);
     } catch (err) {
-      log.error(err);
+      log.object.error({
+        event: "http-routing-error",
+        message: err
+      });
       response.statusCode = 500;
       response.setHeader("Content-Type", "text/plain");
       response.end("Internal server error.");
@@ -208,7 +221,10 @@ function createRouteTreeMap(routeMap, isRoot = true) {
           new RegExp(`^${variableExpression}$`);
         } catch (err) {
           if (err instanceof SyntaxError) {
-            log.warn("Invalid path syntax: `%s`. %O", path, err);
+            log.object.warn({
+              event: "http-router",
+              message: formatWithOptions({ colors }, "Invalid path syntax: `%s`. %O", path, err)
+            });
           }
           continue;
         }
@@ -242,19 +258,24 @@ function createRouteTreeMap(routeMap, isRoot = true) {
 };
 
 server.on("error", function onError(err) {
-  log.fatal(err);
+  log.object.fatal({
+    event: "http-server-error",
+    message: err
+  });
   attemptGracefulShutdown(1);
 });
 
 server.listen(port, function onListen() {
   const { address, port, family } = server.address();
   const host = family === "IPv6" ? `[${address}]` : address;
-  log.info(`Server listening on http://${host}:${port}`);
+  log.object.info({
+    event: "http-listen",
+    host,
+    port,
+    family,
+    message: `Server listening on http://${host}:${port}`
+  });
 });
-
-function ensureLeadingSlash(segment) {
-  return segment.startsWith("/") ? segment : `/${segment}`;
-}
 
 function router(routes, { method, headers, url }) {
   const state = {
@@ -336,10 +357,16 @@ function router(routes, { method, headers, url }) {
 
   return function handlerWrap(request, response) {
     request.on("error", (err) => {
-      log.error(err);
+      log.object.error({
+        event: "http-request-error",
+        message: err
+      });
     });
     response.on("error", (err) => {
-      log.error(err);
+      log.object.error({
+        event: "http-response-error",
+        message: err
+      });
     });
 
     if (log.supports("debug")) {
@@ -349,8 +376,9 @@ function router(routes, { method, headers, url }) {
         const { method, url } = request;
         const loggableURL = `${method} ${url}`;
         const loggableStatusCode = maybeColorizeStatusCode(statusCode);
-        //log.debug("%s %s %s %s", remoteAddress, remotePort, loggableURL, loggableStatusCode);
+
         const entry = {
+          event: "http-request",
           statusCode,
           remoteAddress,
           method,
