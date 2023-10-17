@@ -1,24 +1,39 @@
 export const routes = new Map();
 
+const data = [
+  {
+    id: "mercury",
+    region: "us-east-1",
+  },
+  {
+    id: "venus",
+    region: "us-west-1"
+  },
+  {
+    id: "mars",
+    region: "us-west-2"
+  }
+];
+
 routes.set("/machines", {
   get: ({ response }) => {
-    const body = [
-      {
-        id: "mercury",
-        region: "us-east-1",
-        status: "terminated"
-      },
-      {
-        id: "venus",
-        region: "us-west-1"
-      },
-      {
-        id: "mars",
-        region: "us-west-2"
-      }
-    ];
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify(data));
+  }
+});
+
+routes.set("/machines/{id}", {
+  get: ({ response, matches }) => {
+    const id = matches.pop().groups.id;
+    const machine = data.find((d) => d.id === id);
+
+    if (!id) {
+      res.statusCode = 404;
+      res.end();
+      return;
+    }
 
     response.setHeader("Content-Type", "application/json");
-    response.end(JSON.stringify(body));
+    response.end(JSON.stringify(machine));
   }
 });

@@ -1,10 +1,11 @@
 import { createServer } from "node:http";
-import { env, stdout } from "node:process";
+import { env, hrtime, stdout } from "node:process";
 import { isatty } from "node:tty";
 import { formatWithOptions } from "node:util";
 
 const kHandlers = Symbol.for("handlers");
 const kRouteOptions = Symbol.for("routeOptions");
+const kRouteKey = Symbol.for("routeKey");
 
 const logLevels = {
   trace: 10,
@@ -91,7 +92,7 @@ function maybeColorizeLevel(level) {
     case "debug":
       return `\x1b[34m${level}\x1b[39m`;
     case "trace":
-      return `\x1b[90m${level}\x1b[39m`;
+      return `\x1b[35m${level}\x1b[39m`;
     case "error":
     case "fatal":
       return `\x1b[31m${level}\x1b[39m`;
@@ -122,6 +123,22 @@ function maybeColorizeStatusCode(statusCode) {
   }
 }
 
+function maybeColorizeServiceTime(serviceTime) {
+  if (!colors) {
+    return serviceTime;
+  }
+
+  const duration = Number(serviceTime?.slice(0, -2) || 0);
+
+  if (duration >= 1e3) {
+    return `\x1b[31m${serviceTime}\x1b[39m`;
+  } else if (duration >= 500) {
+    return `\x1b[33m${serviceTime}\x1b[39m`;
+  } else {
+    return `\x1b[32m${serviceTime}\x1b[39m`;
+  }
+}
+
 const server = createServer();
 
 function attemptGracefulShutdown(exitCode = 1) {
@@ -147,11 +164,15 @@ function attemptGracefulShutdown(exitCode = 1) {
 function serve(routeMap) {
   const routes = createRouteTreeMap(routeMap)
   server.on("request", function onRequest(request, response) {
+    let loggingRouteKey = undefined;
     try {
-      router(routes, request)?.(request, response);
+      const { routeKey, handler } = router(routes, request);
+      loggingRouteKey = routeKey;
+      handler?.(request, response);
     } catch (err) {
       log.object.error({
         event: "http-routing-error",
+        "http.route": loggingRouteKey,
         message: err
       });
       if (!response.headersSent) {
@@ -163,7 +184,7 @@ function serve(routeMap) {
   });
 }
 
-function createRouteTreeMap(routeMap) {
+function createRouteTreeMap(routeMap, routeKeyPrefix = "") {
   const routes = new Map();
   const stringPaths = new Map();
 
@@ -178,8 +199,9 @@ function createRouteTreeMap(routeMap) {
       }
       let route = routes.get(path);
       route.set(kRouteOptions, { matchToEnd: true, matchString: false });
+      route.set(kRouteKey, routeKeyPrefix + path);
       if (value instanceof Map) {
-        for (const [k, v] of createRouteTreeMap(value, false).entries()) {
+        for (const [k, v] of createRouteTreeMap(value, path).entries()) {
           route.set(k, v);
         }
       } else {
@@ -246,8 +268,10 @@ function createRouteTreeMap(routeMap) {
         state.routes.set(kRouteOptions, { matchToEnd: false, matchString: true });
       }
     }
+    const routeKey = `${routeKeyPrefix}${path}`;
+    state.routes.set(kRouteKey, routeKey);
     if (value instanceof Map) {
-      for (const [k, v] of createRouteTreeMap(value).entries()) {
+      for (const [k, v] of createRouteTreeMap(value, routeKey).entries()) {
         state.routes.set(k, v);
       }
     } else {
@@ -280,11 +304,14 @@ server.listen(port, function onListen() {
 });
 
 function router(routes, { method, headers, url }) {
+  const supportsTrace = log.supports("trace");
   const state = {
     routes,
     handlers: null,
+    routeKey: "",
     matches: [],
     fullMatch: false,
+    startTime: supportsTrace && hrtime.bigint()
   };
 
   const parsedURL = new URL(url, `http://${headers.host}`);
@@ -306,7 +333,7 @@ function router(routes, { method, headers, url }) {
 
   for (const [segmentIndex, segment] of segments.entries()) {
     for (const [path, value] of state.routes.entries()) {
-      if (path === kHandlers || path === kRouteOptions) {
+      if ([kHandlers, kRouteOptions, kRouteKey].indexOf(path) !== -1) {
         continue;
       }
 
@@ -329,6 +356,7 @@ function router(routes, { method, headers, url }) {
 
           state.matches.push(matches);
           state.routes = value;
+          state.routeKey = value.get(kRouteKey);
           state.handlers = value.get(kHandlers);
           break;
         }
@@ -340,6 +368,7 @@ function router(routes, { method, headers, url }) {
           }
           state.matches.push(matches);
           state.routes = value;
+          state.routeKey = value.get(kRouteKey);
           state.handlers = value.get(kHandlers);
           break;
         }
@@ -349,6 +378,7 @@ function router(routes, { method, headers, url }) {
     if (!state.fullMatch && state.matches.length < segmentIndex + 1) {
       state.matches = [];
       state.routes = routes;
+      state.routeKey = "";
       state.handlers = null;
       break;
     }
@@ -357,7 +387,7 @@ function router(routes, { method, headers, url }) {
   const inner = state.handlers?.[method.toLowerCase()] ||
     state.handlers?.["*"] || fallback(state.handlers);
 
-  return function handlerWrap(request, response) {
+  function handlerWrap(request, response) {
     request.on("error", (err) => {
       log.object.error({
         event: "http-request-error",
@@ -372,28 +402,36 @@ function router(routes, { method, headers, url }) {
     });
 
     if (log.supports("debug")) {
+      const level = supportsTrace ? "trace" : "debug";
       response.on("finish", () => {
         const { statusCode } = response;
         const { remoteAddress, remotePort } = request.socket;
         const { method, url } = request;
-        const loggableURL = `${method} ${url}`;
+        const path = supportsTrace ? url : (state.routeKey || "-");
         const loggableStatusCode = maybeColorizeStatusCode(statusCode);
+        const duration = supportsTrace && (hrtime.bigint() - state.startTime) / BigInt(1e6);
+        const loggableDuration = supportsTrace ? ` (${maybeColorizeServiceTime(`${duration}ms`)})` : "";
 
         const entry = {
           event: "http-request",
           statusCode,
           remoteAddress,
-          method,
-          url,
+          "http.method": method,
+          "http.route": state.routeKey,
+          "http.path": supportsTrace ? url : undefined,
+          "http.duration": duration,
           message:
-            `${remoteAddress} ${remotePort} ${loggableURL} ${loggableStatusCode}`
+            `${remoteAddress} ${remotePort} ${method} ${path} ` +
+            `${loggableStatusCode}${loggableDuration}`
         }
 
-        log.object.debug(entry);
+        log.object[level](entry);
       });
     }
     return inner({ request, response, url: parsedURL, matches: state.matches, log });
-  };
+  }
+
+  return { routeKey: state.routeKey, handler: handlerWrap };
 }
 
 function fallback(handlers) {
