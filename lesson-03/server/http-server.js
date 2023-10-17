@@ -1,4 +1,12 @@
-import { createServer } from "node:http";
+import { createServer as createHttpServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import {
+  createServer as createHttp2Server,
+  createSecureServer as createSecureHttp2Server
+} from "node:http2";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { resolve } from "node:path";
 import { env, hrtime, stdout } from "node:process";
 import { isatty } from "node:tty";
 import { formatWithOptions } from "node:util";
@@ -7,7 +15,33 @@ const kHandlers = Symbol.for("handlers");
 const kRouteOptions = Symbol.for("routeOptions");
 const kRouteKey = Symbol.for("routeKey");
 
-const logLevels = {
+const isCompatibleTerminal = isatty(stdout.fd) && env.TERM
+  && (env.TERM !== "dumb");
+
+const defaults = {
+  HOST: "localhost",
+  PORT: 0,
+  LOG_LEVEL: "info",
+  LOG_FORMAT: isCompatibleTerminal ? "pretty" : "json",
+  TLS_SERVER_KEY: resolve(homedir(), "certs/localhost+2-key.pem"),
+  TLS_SERVER_CERT: resolve(homedir(), "certs/localhost+2.pem")
+};
+
+const {
+  HOST,
+  PORT,
+  LOG_LEVEL,
+  LOG_FORMAT,
+  TLS_CA_CERT,
+  TLS_SERVER_CERT,
+  TLS_SERVER_KEY,
+  NO_COLOR,
+} = Object.assign(defaults, env);
+
+let server = null;
+
+const colors = (LOG_FORMAT === "pretty") && !NO_COLOR
+const levels = {
   trace: 10,
   debug: 20,
   info: 30,
@@ -16,17 +50,7 @@ const logLevels = {
   fatal: 60,
 };
 
-const logLevel = env.LOG_LEVEL || "info";
-
-const port = env.PORT || 0;
-const isCompatibleTerminal = isatty(stdout.fd) && env.TERM
-  && (env.TERM !== "dumb");
-
-const logFormat = env.LOG_FORMAT || (isCompatibleTerminal ? "pretty" : "json");
-
-const colors = (logFormat === "pretty") && !env.NO_COLOR
-
-const logFormatters = {
+const formatters = {
   json: (entry) => JSON.stringify(entry),
   pretty: (entry) => {
     return formatWithOptions({ colors }, "[%s] %s%s: %s",
@@ -35,11 +59,11 @@ const logFormatters = {
       entry.message);
   }
 };
-const formatter = logFormatters[logFormat];
+const formatter = formatters[LOG_FORMAT];
 
-const log = {
+const logger = {
   supports(level) {
-    return logLevels[logLevel] <= logLevels[level]
+    return levels[LOG_LEVEL] <= levels[level]
   },
   write(level, ...args) {
     const entry = {
@@ -58,19 +82,19 @@ const log = {
       obj.message = formatWithOptions({ colors }, obj.message);
     }
     stdout.write(`${formatter(Object.assign(entry, obj))}\n`);
-  }
+  },
 };
+logger.object = { logger };
 
-log.object = { logger: log };
-for (const level of Object.keys(logLevels)) {
-  Object.defineProperty(log, level, {
+for (const level of Object.keys(levels)) {
+  Object.defineProperty(logger, level, {
     value: function(...args) {
       if (this.supports(level)) {
         this.write(level, ...args);
       }
     }
   });
-  Object.defineProperty(log.object, level, {
+  Object.defineProperty(logger.object, level, {
     value: function(obj) {
       if (this.logger.supports(level)) {
         this.logger.writeObject(level, obj);
@@ -139,15 +163,13 @@ function maybeColorizeServiceTime(serviceTime) {
   }
 }
 
-const server = createServer();
-
 function attemptGracefulShutdown(exitCode = 1) {
-  log.object.info({
+  logger.object.info({
     event: "http-close",
     message: "Attempting graceful shutdown..."
   });
   server.close(function onClose() {
-    log.object.info({
+    logger.object.info({
       event: "http-graceful-shutdown",
       message: "Graceful shutdown complete."
     });
@@ -161,16 +183,51 @@ function attemptGracefulShutdown(exitCode = 1) {
   });
 });
 
-function serve(routeMap) {
-  const routes = createRouteTreeMap(routeMap)
+function serve({
+  routes,
+  host = HOST,
+  port = PORT,
+  protocol = "http1.1",
+  secure = false,
+  serverOptions = {}
+}) {
+  const routeTreeMap = createRouteTreeMap(routes)
+
+  let createServer = secure ? createHttpsServer : createHttpServer;
+  if (protocol === "http2") {
+    createServer = secure ? createSecureHttp2Server : createHttp2Server;
+  }
+
+  if (secure) {
+    serverOptions.key ||= readFileSync(TLS_SERVER_KEY);
+    serverOptions.cert ||= readFileSync(TLS_SERVER_CERT);
+    serverOptions.ca ||= TLS_CA_CERT
+      ? readFileSync(TLS_CA_CERT)
+      : undefined;
+  }
+
+  server = createServer(serverOptions);
+  server.on("error", onError);
+  server.on("listening", function onListen() {
+    const { address, port, family } = server.address();
+    const host = family === "IPv6" ? `[${address}]` : address;
+    const scheme = secure ? "https" : "http";
+    logger.object.info({
+      event: "http-listen",
+      host,
+      port,
+      family,
+      message: `Server listening on ${scheme}://${host}:${port}`
+    });
+  });
   server.on("request", function onRequest(request, response) {
     let loggingRouteKey = undefined;
     try {
-      const { routeKey, handler } = router(routes, request);
+      const { routeKey, handler } = router(routeTreeMap, request);
       loggingRouteKey = routeKey;
       handler?.(request, response);
     } catch (err) {
-      log.object.error({
+      logger.object.error({
         event: "http-routing-error",
         "http.route": loggingRouteKey,
         message: err
@@ -182,6 +239,7 @@ function serve(routeMap) {
       }
     }
   });
+  server.listen(port, host);
 }
 
 function createRouteTreeMap(routeMap, routeKeyPrefix = "") {
@@ -245,7 +303,7 @@ function createRouteTreeMap(routeMap, routeKeyPrefix = "") {
           new RegExp(`^${variableExpression}$`);
         } catch (err) {
           if (err instanceof SyntaxError) {
-            log.object.warn({
+            logger.object.warn({
               event: "http-router",
               message: formatWithOptions({ colors }, "Invalid path syntax: `%s`. %O", path, err)
             });
@@ -283,28 +341,16 @@ function createRouteTreeMap(routeMap, routeKeyPrefix = "") {
   return routes;
 };
 
-server.on("error", function onError(err) {
-  log.object.fatal({
+function onError(err) {
+  logger.object.fatal({
     event: "http-server-error",
     message: err
   });
   attemptGracefulShutdown(1);
-});
-
-server.listen(port, function onListen() {
-  const { address, port, family } = server.address();
-  const host = family === "IPv6" ? `[${address}]` : address;
-  log.object.info({
-    event: "http-listen",
-    host,
-    port,
-    family,
-    message: `Server listening on http://${host}:${port}`
-  });
-});
+}
 
 function router(routes, { method, headers, url }) {
-  const supportsTrace = log.supports("trace");
+  const supportsTrace = logger.supports("trace");
   const state = {
     routes,
     handlers: null,
@@ -389,24 +435,27 @@ function router(routes, { method, headers, url }) {
 
   function handlerWrap(request, response) {
     request.on("error", (err) => {
-      log.object.error({
+      logger.object.error({
         event: "http-request-error",
         message: err
       });
     });
     response.on("error", (err) => {
-      log.object.error({
+      logger.object.error({
         event: "http-response-error",
         message: err
       });
     });
 
-    if (log.supports("debug")) {
+    if (logger.supports("debug")) {
       const level = supportsTrace ? "trace" : "debug";
+      const socket = request.httpVersion === "2.0"
+        ? request.stream.session.socket
+        : request.socket;
       response.on("finish", () => {
         const { statusCode } = response;
-        const { remoteAddress, remotePort } = request.socket;
         const { method, url } = request;
+        const { remoteAddress, remotePort } = socket;
         const path = supportsTrace ? url : (state.routeKey || "-");
         const loggableStatusCode = maybeColorizeStatusCode(statusCode);
         const duration = supportsTrace && (hrtime.bigint() - state.startTime) / BigInt(1e6);
@@ -425,10 +474,10 @@ function router(routes, { method, headers, url }) {
             `${loggableStatusCode}${loggableDuration}`
         }
 
-        log.object[level](entry);
+        logger.object[level](entry);
       });
     }
-    return inner({ request, response, url: parsedURL, matches: state.matches, log });
+    return inner({ request, response, url: parsedURL, matches: state.matches, log: logger });
   }
 
   return { routeKey: state.routeKey, handler: handlerWrap };
@@ -447,4 +496,4 @@ function fallback(handlers) {
   };
 }
 
-export { serve, log };
+export { serve, logger };
