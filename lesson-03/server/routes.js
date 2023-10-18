@@ -27,9 +27,9 @@ routes.set("/machines/{id}", {
     const id = matches.pop().groups.id;
     const machine = data.find((d) => d.id === id);
 
-    if (!id) {
-      res.statusCode = 404;
-      res.end();
+    if (!machine) {
+      response.statusCode = 404;
+      response.end();
       return;
     }
 

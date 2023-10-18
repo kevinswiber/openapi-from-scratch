@@ -23,8 +23,8 @@ const defaults = {
   PORT: 0,
   LOG_LEVEL: "info",
   LOG_FORMAT: isCompatibleTerminal ? "pretty" : "json",
-  TLS_SERVER_KEY: resolve(homedir(), "certs/localhost+2-key.pem"),
-  TLS_SERVER_CERT: resolve(homedir(), "certs/localhost+2.pem")
+  TLS_SERVER_KEY: resolve(homedir(), ".local/share/certs/localhost+2-key.pem"),
+  TLS_SERVER_CERT: resolve(homedir(), ".local/share/certs/localhost+2.pem")
 };
 
 const {
@@ -39,6 +39,7 @@ const {
 } = Object.assign(defaults, env);
 
 let server = null;
+const activeSessions = new Set();
 
 const colors = (LOG_FORMAT === "pretty") && !NO_COLOR
 const levels = {
@@ -168,6 +169,39 @@ function attemptGracefulShutdown(exitCode = 1) {
     event: "http-close",
     message: "Attempting graceful shutdown..."
   });
+
+  if (typeof server.closeIdleConnections === "function") {
+    server.closeIdleConnections();
+  }
+
+  for (const session of activeSessions) {
+    if (typeof session.close === "function") {
+      session.close();
+    }
+  }
+
+  function closeIdleConnections() {
+    for (const session of activeSessions) {
+      if (session._httpMessage && !session._httpMessage.finished) {
+        continue;
+      }
+      if (typeof session.close === "function") {
+        session.close();
+      } else {
+        session.destroy();
+      }
+    }
+    setImmediate(() => {
+      if (activeSessions.size === 0) {
+        clearInterval(killWatcher);
+        return;
+      }
+    });
+  }
+  const killWatcher = setInterval(closeIdleConnections,
+    server.keepAliveTimeout || 5000);
+  closeIdleConnections();
+
   server.close(function onClose() {
     logger.object.info({
       event: "http-graceful-shutdown",
@@ -223,7 +257,11 @@ function serve({
   server.on("request", function onRequest(request, response) {
     let loggingRouteKey = undefined;
     try {
-      const { routeKey, handler } = router(routeTreeMap, request);
+      const { routeKey, handler } = router({
+        routes: routeTreeMap,
+        request,
+        protocol
+      });
       loggingRouteKey = routeKey;
       handler?.(request, response);
     } catch (err) {
@@ -349,7 +387,7 @@ function onError(err) {
   attemptGracefulShutdown(1);
 }
 
-function router(routes, { method, headers, url }) {
+function router({ routes, request: { method, headers, url }, protocol }) {
   const supportsTrace = logger.supports("trace");
   const state = {
     routes,
@@ -434,6 +472,24 @@ function router(routes, { method, headers, url }) {
     state.handlers?.["*"] || fallback(state.handlers);
 
   function handlerWrap(request, response) {
+    if (request.httpVersion === "2.0") {
+      const session = request.stream.session;
+      if (activeSessions.has(session)) {
+        session.on("close", () => {
+          activeSessions.remove(session);
+        });
+        activeSessions.add(session);
+      }
+    } else if (protocol === "http2") {
+      // this is an http/1.1 connection on an http/2 server
+      if ((request.headers.connection || "").toLowerCase() === "keep-alive") {
+        const socket = request.socket;
+        socket.on("close", () => {
+          activeSessions.remove(socket);
+        });
+        activeSessions.add(socket);
+      }
+    }
     request.on("error", (err) => {
       logger.object.error({
         event: "http-request-error",
