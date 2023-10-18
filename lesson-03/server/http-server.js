@@ -22,7 +22,7 @@ const defaults = {
   HOST: "localhost",
   PORT: 0,
   LOG_LEVEL: "info",
-  LOG_FORMAT: isCompatibleTerminal ? "pretty" : "json",
+  LOG_STYLE: isCompatibleTerminal ? "pretty" : "json",
   TLS_SERVER_KEY: resolve(homedir(), ".local/share/certs/localhost+2-key.pem"),
   TLS_SERVER_CERT: resolve(homedir(), ".local/share/certs/localhost+2.pem")
 };
@@ -31,17 +31,14 @@ const {
   HOST,
   PORT,
   LOG_LEVEL,
-  LOG_FORMAT,
+  LOG_STYLE,
   TLS_CA_CERT,
   TLS_SERVER_CERT,
   TLS_SERVER_KEY,
   NO_COLOR,
 } = Object.assign(defaults, env);
 
-let server = null;
-const activeSessions = new Set();
-
-const colors = (LOG_FORMAT === "pretty") && !NO_COLOR
+const colors = (LOG_STYLE === "pretty") && !NO_COLOR
 const levels = {
   trace: 10,
   debug: 20,
@@ -60,7 +57,7 @@ const formatters = {
       entry.message);
   }
 };
-const formatter = formatters[LOG_FORMAT];
+const formatter = formatters[LOG_STYLE];
 
 const logger = {
   supports(level) {
@@ -164,59 +161,6 @@ function maybeColorizeServiceTime(serviceTime) {
   }
 }
 
-function attemptGracefulShutdown(exitCode = 1) {
-  logger.object.info({
-    event: "http-close",
-    message: "Attempting graceful shutdown..."
-  });
-
-  if (typeof server.closeIdleConnections === "function") {
-    server.closeIdleConnections();
-  }
-
-  for (const session of activeSessions) {
-    if (typeof session.close === "function") {
-      session.close();
-    }
-  }
-
-  function closeIdleConnections() {
-    for (const session of activeSessions) {
-      if (session._httpMessage && !session._httpMessage.finished) {
-        continue;
-      }
-      if (typeof session.close === "function") {
-        session.close();
-      } else {
-        session.destroy();
-      }
-    }
-    setImmediate(() => {
-      if (activeSessions.size === 0) {
-        clearInterval(killWatcher);
-        return;
-      }
-    });
-  }
-  const killWatcher = setInterval(closeIdleConnections,
-    server.keepAliveTimeout || 5000);
-  closeIdleConnections();
-
-  server.close(function onClose() {
-    logger.object.info({
-      event: "http-graceful-shutdown",
-      message: "Graceful shutdown complete."
-    });
-    process.exit(exitCode);
-  });
-}
-
-["SIGINT", "SIGTERM"].forEach((signal) => {
-  process.on(signal, function onSignal() {
-    attemptGracefulShutdown(0);
-  });
-});
-
 function serve({
   routes,
   host = HOST,
@@ -225,6 +169,7 @@ function serve({
   secure = false,
   serverOptions = {}
 }) {
+  const activeSessions = new Set();
   const routeTreeMap = createRouteTreeMap(routes)
 
   let createServer = secure ? createHttpsServer : createHttpServer;
@@ -240,7 +185,7 @@ function serve({
       : undefined;
   }
 
-  server = createServer(serverOptions);
+  const server = createServer(serverOptions);
   server.on("error", onError);
   server.on("listening", function onListen() {
     const { address, port, family } = server.address();
@@ -260,7 +205,8 @@ function serve({
       const { routeKey, handler } = router({
         routes: routeTreeMap,
         request,
-        protocol
+        protocol,
+        activeSessions
       });
       loggingRouteKey = routeKey;
       handler?.(request, response);
@@ -277,6 +223,61 @@ function serve({
       }
     }
   });
+
+  function attemptGracefulShutdown(exitCode = 1) {
+    logger.object.info({
+      event: "http-close",
+      message: "Attempting graceful shutdown..."
+    });
+
+    if (typeof server.closeIdleConnections === "function") {
+      server.closeIdleConnections();
+    }
+
+    for (const session of activeSessions) {
+      if (typeof session.close === "function") {
+        session.close();
+      }
+    }
+
+    function closeIdleConnections() {
+      for (const session of activeSessions) {
+        if (session._httpMessage && !session._httpMessage.finished) {
+          continue;
+        }
+        if (typeof session.close === "function") {
+          session.close();
+        } else {
+          session.destroy();
+        }
+      }
+      setImmediate(() => {
+        if (activeSessions.size === 0) {
+          clearInterval(killWatcher);
+          return;
+        }
+      });
+    }
+
+    const killWatcher = setInterval(closeIdleConnections,
+      server.keepAliveTimeout || 5000);
+    closeIdleConnections();
+
+    server.close(function onClose() {
+      logger.object.info({
+        event: "http-graceful-shutdown",
+        message: "Graceful shutdown complete."
+      });
+      process.exit(exitCode);
+    });
+  }
+
+  ["SIGINT", "SIGTERM"].forEach((signal) => {
+    process.on(signal, function onSignal() {
+      attemptGracefulShutdown(0);
+    });
+  });
+
   server.listen(port, host);
 }
 
@@ -387,7 +388,12 @@ function onError(err) {
   attemptGracefulShutdown(1);
 }
 
-function router({ routes, request: { method, headers, url }, protocol }) {
+function router({
+  routes,
+  request: { method, headers, url },
+  protocol,
+  activeSessions
+}) {
   const supportsTrace = logger.supports("trace");
   const state = {
     routes,
@@ -413,7 +419,7 @@ function router({ routes, request: { method, headers, url }, protocol }) {
       }
     }
     return acc;
-  }, []);
+  }, []).map((segment) => decodeURIComponent(segment));
 
   for (const [segmentIndex, segment] of segments.entries()) {
     for (const [path, value] of state.routes.entries()) {

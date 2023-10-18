@@ -15,17 +15,21 @@ const data = [
   }
 ];
 
+function json(response, body) {
+  response.setHeader("Content-Type", "application/json");
+  response.end(JSON.stringify(body));
+}
+
 routes.set("/machines", {
   get: ({ response }) => {
-    response.setHeader("Content-Type", "application/json");
-    response.end(JSON.stringify(data));
+    json(response, data);
   }
 });
 
 routes.set("/machines/{id}", {
   get: ({ response, matches }) => {
-    const id = matches.pop().groups.id;
-    const machine = data.find((d) => d.id === id);
+    const { id } = matches.pop().groups;
+    const machine = data.find((m) => m.id === decodeURIComponent(id));
 
     if (!machine) {
       response.statusCode = 404;
@@ -33,7 +37,6 @@ routes.set("/machines/{id}", {
       return;
     }
 
-    response.setHeader("Content-Type", "application/json");
-    response.end(JSON.stringify(machine));
+    json(response, machine);
   }
 });
