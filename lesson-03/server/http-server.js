@@ -480,9 +480,9 @@ function router({
   function handlerWrap(request, response) {
     if (request.httpVersion === "2.0") {
       const session = request.stream.session;
-      if (activeSessions.has(session)) {
+      if (!activeSessions.has(session)) {
         session.on("close", () => {
-          activeSessions.remove(session);
+          activeSessions.delete(session);
         });
         activeSessions.add(session);
       }
@@ -490,10 +490,12 @@ function router({
       // this is an http/1.1 connection on an http/2 server
       if ((request.headers.connection || "").toLowerCase() === "keep-alive") {
         const socket = request.socket;
-        socket.on("close", () => {
-          activeSessions.remove(socket);
-        });
-        activeSessions.add(socket);
+        if (!activeSessions.has(socket)) {
+          socket.on("close", () => {
+            activeSessions.delete(socket);
+          });
+          activeSessions.add(socket);
+        }
       }
     }
     request.on("error", (err) => {
