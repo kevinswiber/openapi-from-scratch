@@ -14,13 +14,7 @@ paths:
               schema:
                 type: array
                 items:
-                  type: object
-                  properties:
-                    id:
-                      type: string
-                    region:
-                      type: string
-                  required: [id, region]
+                  $ref: "#/components/schemas/Machine"
               examples:
                 success:
                   value:
@@ -30,3 +24,32 @@ paths:
                       region: us-west-1
                     - id: mars
                       region: us-west-2
+  /machines/{id}:
+    parameters:
+      - name: id
+        in: path
+        schema:
+          type: string
+    get:
+      responses:
+        "200":
+          description: A single machine.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Machine"
+              examples:
+                success:
+                  value:
+                    id: mercury
+                    region: us-east-1
+components:
+  schemas:
+    Machine:
+      type: object
+      properties:
+        id:
+          type: string
+        region:
+          type: string
+      required: [id, region]

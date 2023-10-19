@@ -5,5 +5,8 @@
   "type": "module",
   "main": "main.js",
   "author": "Kevin Swiber <kswiber@gmail.com>",
-  "license": "MIT"
+  "license": "MIT",
+  "scripts": {
+    "start-dev": "PORT=3000 LOG_LEVEL=trace LOG_STYLE=pretty node --watch ."
+  }
 }

@@ -296,7 +296,14 @@ function serve({
   }
 
   const server = createServer(serverOptions);
-  server.on("error", onError);
+  server.on("error", function onError(err) {
+    logger.object.fatal({
+      event: "http-server-error",
+      message: err
+    });
+    attemptGracefulShutdown(1);
+  });
+
   server.on("listening", function onListen() {
     const { address, port, family } = server.address();
     const host = family === "IPv6" ? `[${address}]` : address;
@@ -490,14 +497,6 @@ function createRouteTreeMap(routeMap, routeKeyPrefix = "") {
   return routes;
 };
 
-function onError(err) {
-  logger.object.fatal({
-    event: "http-server-error",
-    message: err
-  });
-  attemptGracefulShutdown(1);
-}
-
 function router({
   routes,
   request: { method, headers, url },
@@ -511,7 +510,8 @@ function router({
     routeKey: "",
     matches: [],
     fullMatch: false,
-    startTime: supportsTrace && hrtime.bigint()
+    startTime: hrtime.bigint()
+
   };
 
   const parsedURL = new URL(url, `http://${headers.host}`);
@@ -632,7 +632,7 @@ function router({
         const { remoteAddress, remotePort } = socket;
         const path = supportsTrace ? url : (state.routeKey || "-");
         const loggableStatusCode = maybeColorizeStatusCode(statusCode);
-        const duration = supportsTrace && (hrtime.bigint() - state.startTime) / BigInt(1e6);
+        const duration = (hrtime.bigint() - state.startTime) / BigInt(1e6);
         const loggableDuration = supportsTrace ? ` (${maybeColorizeServiceTime(`${duration}ms`)})` : "";
 
         const entry = {
@@ -642,7 +642,7 @@ function router({
           "http.method": method,
           "http.route": state.routeKey,
           "http.path": supportsTrace ? url : undefined,
-          "http.duration": duration,
+          "http.duration": Number(duration),
           message:
             `${remoteAddress} ${remotePort} ${method} ${path} ` +
             `${loggableStatusCode}${loggableDuration}`
