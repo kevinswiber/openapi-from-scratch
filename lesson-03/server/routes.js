@@ -1,5 +1,10 @@
 export const routes = new Map();
 
+function json(response, body) {
+  response.setHeader("Content-Type", "application/json");
+  response.end(JSON.stringify(body));
+}
+
 const data = [
   {
     id: "mercury",
@@ -14,11 +19,6 @@ const data = [
     region: "us-west-2"
   }
 ];
-
-function json(response, body) {
-  response.setHeader("Content-Type", "application/json");
-  response.end(JSON.stringify(body));
-}
 
 routes.set("/machines", {
   get: ({ response }) => {

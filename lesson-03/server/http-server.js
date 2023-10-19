@@ -1,3 +1,113 @@
+// Purpose: A simple HTTP server with routing and logging.
+// Author: Kevin Swiber <kswiber@gmail.com>
+// Exports:
+//   serve({ routes, host, port, protocol, secure, serverOptions })
+//     routes: A Map of routes to handlers. Example:
+//       const routes = new Map();
+//       routes.set("/greeting", {
+//         get: ({ response }) => {
+//           response.setHeader("Content-Type", "application/json");
+//           response.end(JSON.stringify({ hello: "world" }));
+//         }
+//       });
+//     host: The hostname to listen on. Defaults to localhost.
+//     port: The port to listen on. Defaults to 0 (random).
+//     protocol: The protocol to use. Defaults to http1.1, supports http2.
+//     secure: Whether to use TLS. Defaults to false.
+//     serverOptions: Options to pass to the server constructor.
+//   logger: A logger object with the following methods:
+//     trace(...args): Log a trace message.
+//     debug(...args): Log a debug message.
+//     info(...args): Log an info message.
+//     warn(...args): Log a warning message.
+//     error(...args): Log an error message.
+//     fatal(...args): Log a fatal message.
+//     object: An object with the same methods as the logger, but which accepts
+//       an object as the first argument. The object will be formatted as JSON.
+//
+// Logging:
+//   The logger will only log messages at or above the LOG_LEVEL environment
+//   variable. The LOG_STYLE environment variable controls the format of the
+//   log messages. It can be set to "json" or "pretty". The default is "json".
+//   The NO_COLOR environment variable can be set to disable colorized output.
+//   The default is to enable colorized output if the terminal supports it.
+//
+// TLS:
+//   The TLS_CA_CERT, TLS_SERVER_CERT, and TLS_SERVER_KEY environment variables
+//   can be used to specify the paths to the CA certificate, server certificate,
+//   and server key, respectively. The default values are:
+//     TLS_CA_CERT: $HOME/.local/share/certs/localhost+2.pem
+//     TLS_SERVER_CERT: $HOME/.local/share/certs/localhost+2.pem
+//     TLS_SERVER_KEY: $HOME/.local/share/certs/localhost+2-key.pem
+//
+// Routing:
+//   The router supports the following syntax path syntax for the Map keys:
+//     /path/to/resource
+//       Matches the exact string "/path/to/resource".
+//     /path/to/{resource}
+//       Matches the exact string "/path/to/" followed by any string. The matched
+//       string will be available in the matches array as matches[0].groups.resource.
+//     /path/to/{resource:regex}
+//       Matches the exact string "/path/to/" followed by any string that matches the
+//       given regular expression. The matched string will be available in the
+//       matches array as matches[0].groups.resource.
+//     /path/to/{resource*}
+//       Matches the exact string "/path/to/" followed by any string. The matched
+//       string will be available in the matches array as matches[0].groups.resource.
+//       The router will continue to match segments until the end of the path.
+//     /path/to/{resource*:regex}
+//       Matches the exact string "/path/to/" followed by any string that matches the
+//       given regular expression. The matched string will be available in the
+//       matches array as matches[0].groups.resource.
+//       The router will continue to match segments until the end of the path.
+//     /regex/
+//       Matches any string that matches the given regular expression. The matched
+//       string will be available in the matches array as matches[0].
+//
+//   Route handlers support the following syntax:
+//     {
+//       get: ({ request, response, url, matches, logger }) => {
+//         // request: The incoming request object.
+//         // response: The outgoing response object.
+//         // url: A URL object representing the request URL.
+//         // matches: An array of matches from the router.
+//         // logger: A logger object.
+//       },
+//       post: (..),
+//       put: (..),
+//       patch: (..),
+//       delete: (..),
+//       "*": (..)
+//       [method: string]: (..)
+//     }
+//   The router will attempt to match the request method to a handler.
+//     - If no handler is found for the HTTP method, it will fallback to 
+//       the "*" handler.
+//     - If no handler is found on a known path, it will return a 
+//       406 Method Not Allowed response.
+//     - If no handler is found, it will return a 404 Not Found response.
+//
+// MIT License
+//
+// Copyright (c) 2023 Kevin Swiber
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import {
@@ -541,7 +651,13 @@ function router({
         logger.object[level](entry);
       });
     }
-    return inner({ request, response, url: parsedURL, matches: state.matches, log: logger });
+    return inner({
+      request,
+      response,
+      url: parsedURL,
+      matches: state.matches,
+      logger
+    });
   }
 
   return { routeKey: state.routeKey, handler: handlerWrap };
