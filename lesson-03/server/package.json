@@ -1,12 +1,26 @@
 {
-  "name": "openapi-from-scratch-server",
+  "name": "@kevinswiber/openapi-from-scratch-server",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "main": "main.js",
-  "author": "Kevin Swiber <kswiber@gmail.com>",
-  "license": "MIT",
+  "main": "server.js",
+  "imports": {
+    "#internal/logger.js": {
+      "production": "./logger-prod.js",
+      "development": "./logger-dev.js",
+      "default": "./logger-prod.js"
+    }
+  },
   "scripts": {
-    "start-dev": "PORT=3000 LOG_LEVEL=trace LOG_STYLE=pretty node --watch ."
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Kevin Swiber <kswiber@gmail.com> (https://swiber.dev/)",
+  "license": "MIT",
+  "dependencies": {
+    "fastify": "^4.24.3"
+  },
+  "devDependencies": {
+    "pino-pretty": "^10.2.3"
   }
 }
