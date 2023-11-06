@@ -45,6 +45,9 @@ paths:
                     region: us-east-1
 components:
   schemas:
+    KnownRegion:
+      type: string
+      enum: [us-east-1, us-west-1, us-west-2]
     Machine:
       type: object
       properties:
@@ -55,6 +58,3 @@ components:
             - $ref: "#/components/schemas/KnownRegion"
             - type: string
       required: [id, region]
-    KnownRegion:
-      type: string
-      enum: [us-east-1, us-west-1, us-west-2]
