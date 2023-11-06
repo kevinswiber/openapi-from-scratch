@@ -5,11 +5,12 @@
   "type": "module",
   "main": "dist/server.js",
   "imports": {
-    "#internal/logger": {
+    "#internal/logger.js": {
       "production": "./dist/logger-prod.js",
       "development": "./dist/logger-dev.js",
       "default": "./dist/logger-prod.js"
-    }
+    },
+    "#internal/*.js": "./dist/*.js"
   },
   "scripts": {
     "build": "tsc",
