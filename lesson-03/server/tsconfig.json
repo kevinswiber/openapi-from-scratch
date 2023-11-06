@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "resolvePackageJsonImports": true,
+    "verbatimModuleSyntax": true
+  }
+}

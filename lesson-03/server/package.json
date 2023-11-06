@@ -3,16 +3,18 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "main": "server.js",
+  "main": "dist/server.js",
   "imports": {
-    "#internal/logger.js": {
-      "production": "./logger-prod.js",
-      "development": "./logger-dev.js",
-      "default": "./logger-prod.js"
+    "#internal/logger": {
+      "production": "./dist/logger-prod.js",
+      "development": "./dist/logger-dev.js",
+      "default": "./dist/logger-prod.js"
     }
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "dev": "node --conditions=development --watch ."
   },
   "keywords": [],
   "author": "Kevin Swiber <kswiber@gmail.com> (https://swiber.dev/)",
@@ -21,6 +23,12 @@
     "fastify": "^4.24.3"
   },
   "devDependencies": {
-    "pino-pretty": "^10.2.3"
+    "@types/node": "^20.8.10",
+    "@typescript-eslint/eslint-plugin": "^6.9.1",
+    "@typescript-eslint/parser": "^6.9.1",
+    "eslint": "^8.53.0",
+    "pino-pretty": "^10.2.3",
+    "prettier": "3.0.3",
+    "typescript": "^5.2.2"
   }
 }

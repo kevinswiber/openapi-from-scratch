@@ -51,5 +51,10 @@ components:
         id:
           type: string
         region:
-          type: string
+          anyOf:
+            - $ref: "#/components/schemas/KnownRegion"
+            - type: string
       required: [id, region]
+    KnownRegion:
+      type: string
+      enum: [us-east-1, us-west-1, us-west-2]
