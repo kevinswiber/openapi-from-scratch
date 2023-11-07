@@ -22,13 +22,10 @@ const data: Machine[] = [
 ];
 
 export const register: FastifyPluginAsync = async function(fastify) {
-  fastify.get("/machines", function(_request, _reply) {
-    return data;
-  });
-
+  fastify.get("/machines", () => data);
   fastify.get<{ Params: Pick<Machine, "id"> }>(
     "/machines/:id",
-    async function(request, reply) {
+    (request, reply) => {
       const { id } = request.params;
       const machine = data.find(m => m.id === id);
 

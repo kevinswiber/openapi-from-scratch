@@ -1,7 +1,7 @@
 import { env } from "node:process";
 import Fastify from "fastify";
-import { options as loggerOptions } from "#internal/logger.js";
-import { register as registerMachines } from "#internal/routes/machine.js";
+import { options as loggerOptions } from "#internal/logger";
+import { register as registerMachines } from "#internal/routes/machine";
 
 const fastify = Fastify({
   logger: loggerOptions,
