@@ -8,5 +8,6 @@ module.exports = {
     "no-unused-vars": {
       argsIgnorePattern: "^_",
     },
+    "space-before-function-paren": "off",
   },
 };

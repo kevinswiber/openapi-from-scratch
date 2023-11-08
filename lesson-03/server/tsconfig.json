@@ -5,5 +5,15 @@
     "outDir": "./dist",
     "resolvePackageJsonImports": true,
     "verbatimModuleSyntax": true
+  },
+  "watchOptions": {
+    "excludeDirectories": [
+      "**/node_modules",
+      "dist"
+    ],
+    "excludeFiles": [
+      "**/*.js"
+    ],
+    "synchronousWatchDirectory": true
   }
 }

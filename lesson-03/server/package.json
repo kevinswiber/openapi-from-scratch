@@ -7,16 +7,15 @@
   "imports": {
     "#internal/logger": {
       "production": "./dist/logger-prod.js",
-      "development": "./dist/logger-dev.js",
-      "default": "./dist/logger-prod.js"
+      "node": "./dist/logger-dev.js"
     },
     "#internal/*": "./dist/*.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc --build",
     "watch": "tsc --watch",
-    "dev": "node --conditions=development --watch .",
-    "clean": "rimraf ./dist"
+    "clean": "tsc --clean",
+    "develop": "tsc && node --import=./typescript-hooks.js --conditions=development --watch ."
   },
   "keywords": [],
   "author": "Kevin Swiber <kswiber@gmail.com> (https://swiber.dev/)",
@@ -31,7 +30,6 @@
     "eslint": "^8.53.0",
     "pino-pretty": "^10.2.3",
     "prettier": "3.0.3",
-    "rimraf": "^5.0.5",
     "typescript": "^5.2.2"
   }
 }
