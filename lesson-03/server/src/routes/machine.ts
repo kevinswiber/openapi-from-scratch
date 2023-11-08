@@ -1,9 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 
 type KnownRegion = "us-east-1" | "us-west-1" | "us-west-2";
+type Other<T> = T & Record<never, never>;
+
 type Machine = {
   id: string;
-  region: KnownRegion | (string & Record<never, never>);
+  region: KnownRegion | Other<string>;
 };
 
 const data: Machine[] = [
