@@ -12,8 +12,8 @@
     "#internal/*": "./dist/*.js"
   },
   "scripts": {
-    "build": "tsc --build",
-    "watch": "tsc --watch",
+    "build": "tsc --build --incremental",
+    "watch": "tsc --build --incremental --watch",
     "clean": "tsc --clean",
     "develop": "tsc && node --import=./typescript-hooks.js --conditions=development --watch ."
   },

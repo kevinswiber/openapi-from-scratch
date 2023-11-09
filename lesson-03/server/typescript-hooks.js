@@ -1,11 +1,28 @@
+import { fork } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
-import { fork, spawnSync } from "node:child_process";
+import { kill } from "node:process";
+import { fileURLToPath } from "node:url";
 import { threadId } from "node:worker_threads";
 
 if (threadId === 0) {
+  try {
+    const oldPid = readFileSync(".tsc.pid", "utf8");
+    try {
+      kill(oldPid, 0);
+    } catch {
+      run();
+    }
+  } catch {
+    run();
+  }
+}
+
+function run() {
   const tsc = fork(
-    "./node_modules/typescript/lib/tsc.js",
-    ["--build", "--watch"],
+    fileURLToPath(
+      new URL("./node_modules/typescript/lib/tsc.js", import.meta.url),
+    ),
+    ["--build", "--incremental", "--watch"],
     {
       stdio: "inherit",
       execArgv: [],
@@ -13,13 +30,6 @@ if (threadId === 0) {
   );
 
   tsc.on("spawn", () => {
-    try {
-      const oldPid = readFileSync(".tsc.pid", "utf8");
-      spawnSync("kill", ["-9", oldPid]);
-    } catch (e) {
-      // swallow
-    }
-
     const pid = tsc.pid;
     writeFileSync(".tsc.pid", pid.toString());
   });
