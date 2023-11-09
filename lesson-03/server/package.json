@@ -14,8 +14,9 @@
   "scripts": {
     "build": "tsc --build --incremental",
     "watch": "tsc --build --incremental --watch",
-    "clean": "tsc --clean",
-    "develop": "tsc && node --import=./typescript-hook.js --watch .",
+    "clean": "rimraf ./tsconfig.tsbuildinfo && rimraf ./dist",
+    "tidy": "tsc --build --clean",
+    "develop": "npm run build && node --import=./typescript-hook.js --watch .",
     "start": "node --conditions=production ."
   },
   "keywords": [],
@@ -31,6 +32,7 @@
     "eslint": "^8.53.0",
     "pino-pretty": "^10.2.3",
     "prettier": "3.0.3",
+    "rimraf": "^5.0.5",
     "typescript": "^5.2.2"
   }
 }
