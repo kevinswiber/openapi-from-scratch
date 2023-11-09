@@ -15,7 +15,8 @@
     "build": "tsc --build --incremental",
     "watch": "tsc --build --incremental --watch",
     "clean": "tsc --clean",
-    "develop": "tsc && node --import=./typescript-hook.js --conditions=development --watch ."
+    "develop": "tsc && node --import=./typescript-hook.js --watch .",
+    "start": "node --conditions=production ."
   },
   "keywords": [],
   "author": "Kevin Swiber <kswiber@gmail.com> (https://swiber.dev/)",
