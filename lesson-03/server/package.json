@@ -15,7 +15,7 @@
     "build": "tsc --build --incremental",
     "watch": "tsc --build --incremental --watch",
     "clean": "rimraf ./tsconfig.tsbuildinfo && rimraf ./dist",
-    "develop": "npm run build && node --import=./typescript-hook.js --watch .",
+    "develop": "npm run build && node --import=./typescript-hook.js --no-warnings=ExperimentalWarning --watch .",
     "start": "node --conditions=production ."
   },
   "keywords": [],
