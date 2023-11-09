@@ -7,17 +7,14 @@ import { threadId } from "node:worker_threads";
 if (threadId === 0) {
   try {
     const oldPid = readFileSync(".tsc.pid", "utf8");
-    try {
-      kill(oldPid, 0);
-    } catch {
-      run();
-    }
+    kill(oldPid, 0);
   } catch {
     run();
   }
 }
 
 function run() {
+  console.log("starting new");
   const tsc = fork(
     fileURLToPath(
       new URL("./node_modules/typescript/lib/tsc.js", import.meta.url),
