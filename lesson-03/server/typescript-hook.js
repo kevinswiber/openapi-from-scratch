@@ -8,11 +8,20 @@
 // The TypeScript compiler (tsc) will be run in watch mode.
 // This is useful while running Node.js itself runs in watch mode.
 //
+// You'll need to run: npm install --save-dev typescript
 //
 // A pid file will be stored in the current directory to ensure
 // that only one instance of tsc is running at a time.
 //
 // Note: Be sure to add `tsc.pid` to your `.gitignore` file.
+//
+// Example scripts for package.json:
+//  "scripts": {
+//    "build": "tsc --build",
+//    "watch": "tsc --build --watch",
+//    "develop": "npm run build && node --import=./typescript-hook.js --conditions=development --no-warnings=ExperimentalWarning --watch .",
+//    "start": "node --conditions=production ."
+//  }
 //
 // Author: Kevin Swiber (https://twitter.com/kevinswiber)
 
@@ -29,28 +38,31 @@ if (threadId === 0) {
     const oldPid = readFileSync(pidFile, "utf8");
     kill(oldPid, 0);
   } catch {
-    run();
+    await run();
   }
 }
 
 function run() {
-  const tsc = fork(
-    fileURLToPath(
-      new URL("./node_modules/typescript/lib/tsc.js", import.meta.url),
-    ),
-    ["--build", "--watch"],
-    {
-      stdio: "inherit",
-      execArgv: [],
-    },
-  );
+  return new Promise((resolve, reject) => {
+    const tsc = fork(
+      fileURLToPath(
+        new URL("./node_modules/typescript/lib/tsc.js", import.meta.url),
+      ),
+      ["--build", "--watch"],
+      {
+        stdio: "inherit",
+        execArgv: [],
+      },
+    );
 
-  tsc.on("spawn", () => {
-    const pid = tsc.pid;
-    writeFileSync(pidFile, pid.toString());
-  });
+    tsc.on("spawn", () => {
+      const { pid } = tsc;
+      writeFileSync(pidFile, pid.toString());
+      resolve();
+    });
 
-  tsc.on("error", err => {
-    console.error(err);
+    tsc.on("error", err => {
+      reject(err);
+    });
   });
 }

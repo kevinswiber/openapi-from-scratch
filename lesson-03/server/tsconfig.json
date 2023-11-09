@@ -12,8 +12,7 @@
     "tsBuildInfoFile": "./.cache/server.tsbuildinfo"
   },
   "watchOptions": {
-    "excludeFiles": [
-      "**/*.js"
-    ]
+    "watchDirectory": "dynamicPriorityPolling",
+    "watchFile": "dynamicPriorityPolling"
   }
 }
