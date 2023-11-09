@@ -4,9 +4,11 @@ import { kill } from "node:process";
 import { fileURLToPath } from "node:url";
 import { threadId } from "node:worker_threads";
 
+const pidFile = fileURLToPath(new URL("./tsc.pid", import.meta.url));
+
 if (threadId === 0) {
   try {
-    const oldPid = readFileSync(".tsc.pid", "utf8");
+    const oldPid = readFileSync(pidFile, "utf8");
     kill(oldPid, 0);
   } catch {
     run();
@@ -18,7 +20,7 @@ function run() {
     fileURLToPath(
       new URL("./node_modules/typescript/lib/tsc.js", import.meta.url),
     ),
-    ["--build", "--incremental", "--watch"],
+    ["--build", "--watch"],
     {
       stdio: "inherit",
       execArgv: [],
@@ -27,7 +29,7 @@ function run() {
 
   tsc.on("spawn", () => {
     const pid = tsc.pid;
-    writeFileSync(".tsc.pid", pid.toString());
+    writeFileSync(pidFile, pid.toString());
   });
 
   tsc.on("error", err => {
