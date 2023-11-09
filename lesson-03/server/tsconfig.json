@@ -9,7 +9,8 @@
     "resolvePackageJsonImports": true,
     "verbatimModuleSyntax": true,
     "incremental": true,
-    "tsBuildInfoFile": "./.cache/server.tsbuildinfo"
+    "tsBuildInfoFile": "./.cache/server.tsbuildinfo",
+    "strictNullChecks": true
   },
   "watchOptions": {
     "watchDirectory": "dynamicPriorityPolling",

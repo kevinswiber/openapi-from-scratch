@@ -11,7 +11,7 @@ fastify.register(registerMachines);
 
 try {
   await fastify.listen({
-    port: +env.PORT || 3000,
+    port: +(env.PORT || 3000),
   });
 } catch (err) {
   fastify.log.error(err);

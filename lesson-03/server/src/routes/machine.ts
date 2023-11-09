@@ -22,7 +22,7 @@ const data: Machine[] = [
   },
 ];
 
-export const register: FastifyPluginAsync = async function(fastify) {
+export const register: FastifyPluginAsync = async function (fastify) {
   fastify.get("/machines", () => data);
   fastify.get<{ Params: Pick<Machine, "id"> }>(
     "/machines/:id",
