@@ -14,7 +14,6 @@ if (threadId === 0) {
 }
 
 function run() {
-  console.log("starting new");
   const tsc = fork(
     fileURLToPath(
       new URL("./node_modules/typescript/lib/tsc.js", import.meta.url),
