@@ -7,6 +7,10 @@
 	{
 		"name": "lesson-02",
 		"path": "lesson-02"
+	},
+	{
+		"name": "lesson-03",
+		"path": "lesson-03"
 	}
 ],
   "settings": {}

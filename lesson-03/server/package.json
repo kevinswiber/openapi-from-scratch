@@ -1,0 +1,38 @@
+{
+  "name": "@kevinswiber/openapi-from-scratch-server",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/server.js",
+  "imports": {
+    "#internal/logger": {
+      "production": "./dist/logger-prod.js",
+      "node": "./dist/logger-dev.js"
+    },
+    "#internal/*": "./dist/*.js"
+  },
+  "scripts": {
+    "build": "tsc --build --incremental",
+    "watch": "tsc --build --incremental --watch",
+    "check": "eslint .",
+    "clean": "rimraf ./.cache && rimraf ./dist",
+    "develop": "npm run build && node --import=./typescript-hook.js --conditions=development --no-warnings=ExperimentalWarning --watch .",
+    "start": "node --conditions=production ."
+  },
+  "keywords": [],
+  "author": "Kevin Swiber <kswiber@gmail.com> (https://swiber.dev/)",
+  "license": "MIT",
+  "dependencies": {
+    "fastify": "^4.24.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.10",
+    "@typescript-eslint/eslint-plugin": "^6.9.1",
+    "@typescript-eslint/parser": "^6.9.1",
+    "eslint": "^8.53.0",
+    "pino-pretty": "^10.2.3",
+    "prettier": "3.0.3",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.2.2"
+  }
+}

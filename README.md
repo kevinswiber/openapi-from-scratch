@@ -6,8 +6,9 @@ This repository is the code companion for a training series on [OpenAPI Specific
 
 ## Modules
 
-- [Intro to OpenAPI](./lesson-01) [lesson-01]
-- [Intro to JSON Schema](./lesson-02) [lesson-02]
+-   [Intro to OpenAPI](./lesson-01) [lesson-01]
+-   [Intro to JSON Schema](./lesson-02) [lesson-02]
+-   [Shared schema components, implementing a server, and using a validating proxy](./lesson-03) [lesson-03]
 
 ## Questions?
 

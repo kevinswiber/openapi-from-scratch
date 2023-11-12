@@ -1,0 +1,20 @@
+{
+  "include": [
+    "./src"
+  ],
+  "compilerOptions": {
+    "module": "nodenext",
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "resolvePackageJsonImports": true,
+    "verbatimModuleSyntax": true,
+    "incremental": true,
+    "tsBuildInfoFile": "./.cache/server.tsbuildinfo",
+    "strictNullChecks": true,
+    "noImplicitAny": true
+  },
+  "watchOptions": {
+    "watchDirectory": "dynamicPriorityPolling",
+    "watchFile": "dynamicPriorityPolling"
+  }
+}
